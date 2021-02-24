@@ -1,4 +1,16 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:html_character_entities/html_character_entities.dart';
+import 'package:quiz_app/controller/quiz/quiz_controller.dart';
+import 'package:quiz_app/controller/quiz/quiz_state.dart';
+import 'package:quiz_app/enums/difficulty.dart';
+import 'package:quiz_app/models/faliure_model.dart';
+import 'package:quiz_app/repositories/quiz_repository.dart';
+
+import 'models/question_model.dart';
 
 void main() {
   runApp(MyApp());
@@ -8,106 +20,360 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
+    return ProviderScope(
+      child: MaterialApp(
+        title: 'Quiz App',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+
+          primarySwatch: Colors.yellow,
+          bottomSheetTheme:
+            const BottomSheetThemeData(backgroundColor: Colors.transparent),
+        ),
+        home: QuizScreen(),
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
+final quizQuestionsProvider= FutureProvider.autoDispose<List<Question>>(
+        (ref)=>ref.watch(quizRepositoryProvider).getQuestions(numQuestions: 5, categoryId: Random().nextInt(24)+9, difficulty: Difficulty.any)
+);
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
+class QuizScreen extends HookWidget{
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  Widget build(BuildContext context) {
+
+    final quizQuestions= useProvider(quizQuestionsProvider);
+    final pageController=usePageController();
+    // TODO: implement build
+    return Container(
+      height: MediaQuery.of(context).size.height,
+      width: MediaQuery.of(context).size.width,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFD4418E), Color(0xFF0652C5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: quizQuestions.when(data: (questions)=>_buildBody(context,pageController,questions), loading: ()=>const Center(child: CircularProgressIndicator(),), error: (error,_)=> QuizError(
+          message: error is Faliure? error.message: 'Something went wrong!',
+        ),
+        ),
+
+      bottomSheet: quizQuestions.maybeWhen(
+          data: (questions){
+            final quizState= useProvider(quizControllerProvider.state);
+            if(!quizState.answered) return const SizedBox.shrink();
+            return CustomButton(title: pageController.page.toInt()+1< questions.length? 'Next Question': 'See Results', onTap: (){
+              context.read(quizControllerProvider).nextQuestion(questions,pageController.page.toInt());
+              if(pageController.page.toInt()+1<questions.length){
+                pageController.nextPage(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.linear,
+                );
+              }
+            });
+          },
+          orElse: ()=> const SizedBox.shrink()
+      ),
+    ),
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+
+class QuizError extends StatelessWidget{
+  final String message;
+  const QuizError({
+    Key key,
+    @required this.message,
+}):super (key: key);
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(message,style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20.0,
+          ),),
+          const SizedBox(height: 20.0,),
+          CustomButton(
+            title: 'Retry',
+            onTap: () => context.refresh(quizRepositoryProvider),
+          )
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
+    );
+
+  }
+}
+
+final List<BoxShadow> boxShadow= const[
+  BoxShadow(
+color: Colors.black26,
+offset: Offset(0, 2),
+blurRadius: 4.0,
+)
+];
+
+class CustomButton extends StatelessWidget {
+
+  final String title;
+  final VoidCallback onTap;
+
+  const CustomButton({
+    Key key,
+    @required this.title,
+    @required this.onTap,
+}): super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.all(20.0),
+        height: 50.0,
+        width: double.infinity,
+        decoration:  BoxDecoration(
+          color:  Colors.yellow[700],
+          boxShadow: boxShadow,
+          borderRadius: BorderRadius.circular(25.0),
+
+        ),
+        alignment: Alignment.center,
+        child:  Text(
+          title,
+          style:  const TextStyle(
+            fontSize: 18.0,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _buildBody(
+BuildContext context,
+PageController pageController,
+List<Question> questions,
+){
+  if(questions.isEmpty) return QuizError(message: 'No Questions Found.');
+
+  final quizState= useProvider(quizControllerProvider.state);
+  return quizState.status== QuizStatus.complete? QuizResults(state:quizState,questions:questions)
+      : QuizQuestions(
+    pageController:pageController,
+    state: quizState,
+    questions:questions,
+  );
+
+}
+
+class QuizQuestions extends StatelessWidget{
+  final PageController pageController;
+  final QuizState state;
+  final List<Question> questions;
+
+  const QuizQuestions({
+    Key key,
+    @required this.pageController,
+    @required this.state,
+    @required this.questions,
+}): super (key:key);
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: pageController,
+      physics:  NeverScrollableScrollPhysics(),
+      itemCount: questions.length,
+      itemBuilder: (BuildContext context, int index){
+        final question=questions[index];
+        return Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
+          children: [
+            Text('Question ${index+1} of ${questions.length}',
+            style:const TextStyle(
+              color: Colors.white,
+              fontSize: 28.0,
+              fontWeight: FontWeight.bold,
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
+              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 12.0),
+            child:  Text(
+              HtmlCharacterEntities.decode(question.question),
+              style:  const TextStyle(
+                color: Colors.white,
+                fontSize: 28.0,
+                fontWeight: FontWeight.w500
+              ),
             ),
+          ),
+            Divider(
+              color: Colors.grey[200],
+              height: 32.0,
+              thickness: 2.0,
+              indent: 20.0,
+              endIndent: 20.0,
+            ),
+
+            Column(
+              children: question.answers.map((e) => AnswerCard(
+                answer:e,
+                isSelected: e==state.selectedAnswer,
+                isCorrect: e==question.correctAnswer,
+                isDisplayedAnswer:state.answered,
+                onTap: ()=> context.read(quizControllerProvider).submitAnswer(question, e),
+              ),).toList(),
+
+            )
+          ],
+        );
+        },
+    );
+  }
+
+}
+
+class AnswerCard  extends StatelessWidget{
+
+  final String answer;
+  final bool isSelected;
+  final bool isCorrect;
+  final bool isDisplayedAnswer;
+  final VoidCallback onTap;
+
+  const AnswerCard({Key key, this.answer, this.isSelected, this.isCorrect, this.isDisplayedAnswer, this.onTap}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(
+          vertical: 12.0,
+          horizontal: 20.0,
+        ),
+        padding: const EdgeInsets.symmetric(
+          vertical: 12.0,
+          horizontal: 20.0,
+        ),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color:  Colors.white,
+          boxShadow: boxShadow,
+          border: Border.all(
+            color: isDisplayedAnswer? isCorrect?Colors.green: isSelected? Colors.red: Colors.white :Colors.white,
+                width: 4.0,
+          ) ,
+          borderRadius: BorderRadius.circular(100.0),
+        ),
+        child:  Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                HtmlCharacterEntities.decode(answer),
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 16.0,
+                  fontWeight: isDisplayedAnswer && isCorrect? FontWeight.bold: FontWeight.w400
+                ),
+              ),
+            ),
+            if(isDisplayedAnswer)
+              isCorrect?
+                  const CircularIcon(icon: Icons.check,color:Colors.green)
+                  : isSelected
+            ? const CircularIcon(
+                icon: Icons.close,
+                color:Colors.red,
+              )
+                  :const SizedBox.shrink()
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+}
+
+class QuizResults  extends StatelessWidget{
+  final QuizState state;
+  final List<Question> questions;
+
+  const QuizResults({
+    Key key,
+    @required this.state,
+    @required this.questions,
+}): super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '${state.correct.length} / ${questions.length}',
+          style:  const TextStyle(
+            color: Colors.white,
+            fontSize: 60.0,
+            fontWeight: FontWeight.w600
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const Text('Correct',
+        style:  TextStyle(
+          color:  Colors.white,
+          fontSize: 48.0,
+          fontWeight:  FontWeight.bold
+        ),
+        textAlign: TextAlign.center,
+        ),
+
+        const SizedBox(height: 40.0,),
+        CustomButton(title: 'New Quiz', onTap: (){
+          context.refresh(quizRepositoryProvider);
+          context.read(quizControllerProvider).reset();
+        },
+        ),
+      ],
+    );
+  }
+}
+
+class CircularIcon extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+
+  const CircularIcon({Key key,@required this.icon,@required this.color}) : super(key: key);
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 24.0,
+      width: 24.0,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: boxShadow,
+      ),
+      child: Icon(
+        icon,
+        color: Colors.white,
+        size: 16.0,
+      ),
     );
   }
 }
