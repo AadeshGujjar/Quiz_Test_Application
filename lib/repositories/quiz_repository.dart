@@ -38,7 +38,7 @@ class QuizRepository extends BaseQuizRepository{
         );
       }
       final response = await _read(dioProvider).get(
-        'https://opentb.com/api.php',
+        'https://opentdb.com/api.php?amount=10',
         queryParameters:queryParameters,
       );
 
@@ -53,7 +53,7 @@ class QuizRepository extends BaseQuizRepository{
        return [];
     } on DioError catch (err){
       print(err);
-      throw Faliure(message: err.response?.statusMessage);
+      throw Faliure(message: err.response?.statusMessage ?? 'Something went wrong!',);
     } on SocketException catch(err){
       print(err);
       throw const Faliure(message: 'Please check your connection.');
